@@ -11,7 +11,7 @@ import torch
 
 def gsutil_getsize(url=''):
     # gs://bucket/file size https://cloud.google.com/storage/docs/gsutil/commands/du
-    s = subprocess.check_output('gsutil du %s' % url, shell=True).decode('utf-8')
+    s = subprocess.check_output(f'gsutil du {url}', shell=True).decode('utf-8')
     return eval(s.split(' ')[0]) if len(s) else 0  # bytes
 
 
@@ -20,14 +20,15 @@ def attempt_download(weights):
     weights = weights.strip().replace("'", '')
     file = Path(weights).name
 
-    msg = weights + ' missing, try downloading from https://github.com/WongKinYiu/yolor/releases/'
+    msg = f'{weights} missing, try downloading from https://github.com/WongKinYiu/yolor/releases/'
+
     models = ['yolor_p6.pt', 'yolor_w6.pt']  # available models
 
     if file in models and not os.path.isfile(weights):
 
         try:  # GitHub
-            url = 'https://github.com/WongKinYiu/yolor/releases/download/v1.0/' + file
-            print('Downloading %s to %s...' % (url, weights))
+            url = f'https://github.com/WongKinYiu/yolor/releases/download/v1.0/{file}'
+            print(f'Downloading {url} to {weights}...')
             torch.hub.download_url_to_file(url, weights)
             assert os.path.exists(weights) and os.path.getsize(weights) > 1E6  # check
         except Exception as e:  # GCP
@@ -44,18 +45,21 @@ def attempt_load(weights, map_location=None):
 
     if len(model) == 1:
         return model[-1]  # return model
-    else:
-        print('Ensemble created with %s\n' % weights)
-        for k in ['names', 'stride']:
-            setattr(model, k, getattr(model[-1], k))
-        return model  # return ensemble
+    print('Ensemble created with %s\n' % weights)
+    for k in ['names', 'stride']:
+        setattr(model, k, getattr(model[-1], k))
+    return model  # return ensemble
 
 
 def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
     # Downloads a file from Google Drive. from utils.google_utils import *; gdrive_download()
     t = time.time()
 
-    print('Downloading https://drive.google.com/uc?export=download&id=%s as %s... ' % (id, name), end='')
+    print(
+        f'Downloading https://drive.google.com/uc?export=download&id={id} as {name}... ',
+        end='',
+    )
+
     os.remove(name) if os.path.exists(name) else None  # remove existing
     os.remove('cookie') if os.path.exists('cookie') else None
 
@@ -78,7 +82,7 @@ def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
     # Unzip if archive
     if name.endswith('.zip'):
         print('unzipping... ', end='')
-        os.system('unzip -q %s' % name)  # unzip
+        os.system(f'unzip -q {name}')
         os.remove(name)  # remove zip to free space
 
     print('Done (%.1fs)' % (time.time() - t))

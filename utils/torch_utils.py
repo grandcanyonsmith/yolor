@@ -44,7 +44,10 @@ def select_device(device='', batch_size=None):
     cpu_request = device.lower() == 'cpu'
     if device and not cpu_request:  # if device requested other than 'cpu'
         os.environ['CUDA_VISIBLE_DEVICES'] = device  # set environment variable
-        assert torch.cuda.is_available(), 'CUDA unavailable, invalid device %s requested' % device  # check availablity
+        assert (
+            torch.cuda.is_available()
+        ), f'CUDA unavailable, invalid device {device} requested'
+
 
     cuda = False if cpu_request else torch.cuda.is_available()
     if cuda:
@@ -54,7 +57,7 @@ def select_device(device='', batch_size=None):
             assert batch_size % ng == 0, 'batch-size %g not multiple of GPU count %g' % (batch_size, ng)
         x = [torch.cuda.get_device_properties(i) for i in range(ng)]
         s = f'Using torch {torch.__version__} '
-        for i in range(0, ng):
+        for i in range(ng):
             if i == 1:
                 s = ' ' * len(s)
             logger.info("%sCUDA:%g (%s, %dMB)" % (s, i, x[i].name, x[i].total_memory / c))
@@ -76,7 +79,13 @@ def is_parallel(model):
 
 def intersect_dicts(da, db, exclude=()):
     # Dictionary intersection of matching keys and shapes, omitting 'exclude' keys, using da values
-    return {k: v for k, v in da.items() if k in db and not any(x in k for x in exclude) and v.shape == db[k].shape}
+    return {
+        k: v
+        for k, v in da.items()
+        if k in db
+        and all(x not in k for x in exclude)
+        and v.shape == db[k].shape
+    }
 
 
 def initialize_weights(model):
@@ -150,12 +159,12 @@ def model_info(model, verbose=False, img_size=640):
             print('%5g %40s %9s %12g %20s %10.3g %10.3g' %
                   (i, name, p.requires_grad, p.numel(), list(p.shape), p.mean(), p.std()))
 
-    try:  # FLOPS
+    try:
         from thop import profile
         flops = profile(deepcopy(model), inputs=(torch.zeros(1, 3, img_size, img_size),), verbose=False)[0] / 1E9 * 2
         img_size = img_size if isinstance(img_size, list) else [img_size, img_size]  # expand if int/float
         fs = ', %.9f GFLOPS' % (flops)  # 640x640 FLOPS
-    except (ImportError, Exception):
+    except Exception:
         fs = ''
 
     logger.info(f"Model Summary: {len(list(model.modules()))} layers, {n_p} parameters, {n_g} gradients{fs}")
@@ -181,17 +190,15 @@ def load_classifier(name='resnet101', n=2):
 
 
 def scale_img(img, ratio=1.0, same_shape=False):  # img(16,3,256,416), r=ratio
-    # scales img(bs,3,y,x) by ratio
     if ratio == 1.0:
         return img
-    else:
-        h, w = img.shape[2:]
-        s = (int(h * ratio), int(w * ratio))  # new size
-        img = F.interpolate(img, size=s, mode='bilinear', align_corners=False)  # resize
-        if not same_shape:  # pad/crop img
-            gs = 32  # (pixels) grid size
-            h, w = [math.ceil(x * ratio / gs) * gs for x in (h, w)]
-        return F.pad(img, [0, w - s[1], 0, h - s[0]], value=0.447)  # value = imagenet mean
+    h, w = img.shape[2:]
+    s = (int(h * ratio), int(w * ratio))  # new size
+    img = F.interpolate(img, size=s, mode='bilinear', align_corners=False)  # resize
+    if not same_shape:  # pad/crop img
+        gs = 32  # (pixels) grid size
+        h, w = [math.ceil(x * ratio / gs) * gs for x in (h, w)]
+    return F.pad(img, [0, w - s[1], 0, h - s[0]], value=0.447)  # value = imagenet mean
 
 
 def copy_attr(a, b, include=(), exclude=()):
